@@ -1,0 +1,102 @@
+<script runat="server">
+Platform.Load("core", "1.1.5");
+
+// === CONFIG ===
+var account_id = "";
+var client_id = "";
+var client_secret = "";
+var authEndpoint = "https://.auth.marketingcloudapis.com/";
+var restInstanceUrl = "https://.rest.marketingcloudapis.com/";
+var deName = "";
+
+try {
+  // === STEP 1: Get Access Token ===
+  var payload = {
+    grant_type: "client_credentials",
+    client_id: client_id,
+    client_secret: client_secret,
+    account_id: account_id
+  };
+
+  var tokenUrl = authEndpoint + "v2/token";
+  var tokenResult = HTTP.Post(tokenUrl, "application/json", Stringify(payload));
+  var statusCode = tokenResult["StatusCode"];
+  var response = tokenResult["Response"][0];
+
+  if (statusCode != 200) {
+    Write("<br>Auth failed: " + statusCode + "<br>" + response);
+    return;
+  }
+
+  var tokenResponse = Platform.Function.ParseJSON(response);
+  var accessToken = tokenResponse.access_token;
+  Write("<br><b>Access Token:</b> " + accessToken);
+
+  // === STEP 2: Get All Journeys ===
+  var endpoint = restInstanceUrl + "interaction/v1/interactions";
+  var request = new Script.Util.HttpRequest(endpoint);
+  request.method = "GET";
+  request.setHeader("Authorization", "Bearer " + accessToken);
+  request.contentType = "application/json";
+
+  var results = request.send();
+  var responseStr = String(results.content);
+  var responseJSON = Platform.Function.ParseJSON(responseStr);
+
+  Write("<br><b>Interactions StatusCode:</b> " + results.statusCode);
+  Write("<br><b>Total Journeys:</b> " + responseJSON.items.length);
+
+  var de = DataExtension.Init(deName);
+
+  // === STEP 3: Loop Journeys ===
+  for (var i = 0; i < responseJSON.items.length; i++) {
+    var journeyId = responseJSON.items[i].id;
+    var journeyName = responseJSON.items[i].name;
+    var journeyKey = responseJSON.items[i].key;
+
+    Write("<hr><b>Journey:</b> " + journeyName + " (" + journeyId + ")");
+
+    // === STEP 4: Get Journey Details by ID ===
+    var detailEndpoint = restInstanceUrl + "interaction/v1/interactions/" + journeyId;
+    var detailRequest = new Script.Util.HttpRequest(detailEndpoint);
+    detailRequest.method = "GET";
+    detailRequest.setHeader("Authorization", "Bearer " + accessToken);
+    detailRequest.contentType = "application/json";
+
+    var detailResults = detailRequest.send();
+    var detailResponseStr = String(detailResults.content);
+    var detailJSON = Platform.Function.ParseJSON(detailResponseStr);
+
+    Write("<br><b>Journey Detail StatusCode:</b> " + detailResults.statusCode);
+
+    // ✅ FIX: Extract tags from array of objects
+    var tags = "";
+
+    if (detailJSON.tags && detailJSON.tags.length > 0) {
+      var tagNames = [];
+      for (var t = 0; t < detailJSON.tags.length; t++) {
+        if (detailJSON.tags[t].name) {
+          tagNames.push(detailJSON.tags[t].name);
+        }
+      }
+      tags = tagNames.join(", ");
+    }
+
+    Write("<br><b>Tags:</b> " + tags);
+
+    // === STEP 5: Insert into Data Extension ===
+    var data = {
+      JourneyID: journeyId,
+      JourneyName: journeyName,
+      JourneyKey: journeyKey,
+      Tags: tags
+    };
+
+    var insertResult = de.Rows.Add(data);
+    Write("<br>Inserted to DE: " + Stringify(insertResult));
+  }
+
+} catch (err) {
+  Write("<br><b>Error:</b> " + Stringify(err));
+}
+</script>
