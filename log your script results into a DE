@@ -1,0 +1,30 @@
+var logDE = DataExtension.Init("Your_Log_DataExtensionName");
+
+for (var i = 0; i < rows.length; i++) {
+    // ... existing logic ...
+
+    for (var j = 0; j < data.length; j++) {
+        var subObj = Subscriber.Init(data[j].SubscriberKey);
+        var subscriberInfo = {
+            SubscriberKey: data[j].SubscriberKey,
+            Status: status
+        };
+        var updateStatus = subObj.Update(subscriberInfo);
+
+        if (updateStatus == 'OK') {
+            logDE.Rows.Add({
+                SubscriberKey: data[j].SubscriberKey,
+                Status: status,
+                Message: "Updated successfully",
+                LogDate: Now()
+            });
+        } else {
+            logDE.Rows.Add({
+                SubscriberKey: data[j].SubscriberKey,
+                Status: status,
+                Message: "Error updating: " + Stringify(updateStatus),
+                LogDate: Now()
+            });
+        }
+    }
+}
